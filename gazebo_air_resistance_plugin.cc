@@ -10,17 +10,11 @@
 #include <map>
 #include <memory>
 #include <sstream>
-
 #include <cmath>
-
-#include <boost/regex.hpp>
-#include <boost/algorithm/string_regex.hpp>
 #include <vector>
 
 
 namespace gazebo {
-
-    constexpr double kAirDensity = 1.24;
 
 
     static std::map<std::string, double> dragCoefficients = {{"box",                    1.05},
@@ -38,6 +32,10 @@ namespace gazebo {
             // Store the pointer to the model
             this->model = _parent;
             this->my_sdf = _sdf;
+
+
+            if (my_sdf->HasElement("my_air_density"))
+                kAirDensity = std::stod(my_sdf->GetElement("my_air_density")->GetValue()->GetAsString());
 
             // Listen to the update event. This event is broadcast every
             // simulation iteration.
@@ -72,33 +70,6 @@ namespace gazebo {
         }
 
 
-        double parseCylinderSize(std::string &line) {
-            std::size_t pos = line.find(">");
-            line = line.substr(pos + 1);
-            pos = line.find("/");
-            line = line.substr(0, pos - 1);
-            std::string::size_type sz;
-
-            return std::stod(line, &sz);
-        }
-
-        void parseBoxSizes(std::string line, double &x, double &y, double &z) {
-            std::size_t pos = line.find(">");
-            line = line.substr(pos + 1);
-            pos = line.find("/");
-            line = line.substr(0, pos - 1);
-            std::vector<std::string> words;
-            boost::algorithm::split_regex(words, line, boost::regex("\\s+"), boost::match_default);
-
-            std::string::size_type sz;     // alias of size_t
-
-
-            x = std::stod(words[0], &sz);
-            y = std::stod(words[1], &sz);
-            z = std::stod(words[2], &sz);
-        }
-
-
         inline double cylinder_mantle_area(double height, double radius) {
             return 2.0 * radius * height;
         }
@@ -117,33 +88,12 @@ namespace gazebo {
 
         void newLink(const boost::shared_ptr<gazebo::physics::Link> &link) {
 
-            auto my_prefix = "";
 
-            std::string geometry_ = link->GetSDF()->GetElement("visual")->GetElement("geometry")->ToString(
-                    my_prefix);
-            std::istringstream f(geometry_);
-            std::string line;
-            std::getline(f, line); //this is <geometry> line  doesn't care
-
-            std::getline(f, line);
-
-            if (line.find("<box") != std::string::npos) {
-                std::getline(f, line);
-                double x, y, z;
-                parseBoxSizes(line, x, y, z);
-
-                cacheLinksInfo[link->GetName()] = gazebo::math::Vector3(
-                        0.5 * kAirDensity * dragCoefficients["box"] * box_area(y, z),
-                        0.5 * kAirDensity * dragCoefficients["box"] * box_area(z, x),
-                        0.5 * kAirDensity * dragCoefficients["box"] * box_area(x, y));
-
-
-            } else if (line.find("<cyl") != std::string::npos) {
-                std::getline(f, line);
-                double length = parseCylinderSize(line);
-                std::getline(f, line);
-                double radius = parseCylinderSize(line);
-
+            if (link->GetSDF()->GetElement("visual")->GetElement("geometry")->HasElement("cylinder")) {
+                double radius = std::stod(link->GetSDF()->GetElement("visual")->GetElement("geometry")->GetElement(
+                        "cylinder")->GetElement("radius")->GetValue()->GetAsString());
+                double length = std::stod(link->GetSDF()->GetElement("visual")->GetElement("geometry")->GetElement(
+                        "cylinder")->GetElement("length")->GetValue()->GetAsString());
 
                 double cyl_mantle =
                         0.5 * kAirDensity * dragCoefficients["cylinder mantle"] * cylinder_mantle_area(length, radius);
@@ -151,11 +101,24 @@ namespace gazebo {
 
                 cacheLinksInfo[link->GetName()] = gazebo::math::Vector3(cyl_mantle, cyl_mantle, cyl_base);
 
+            } else if (link->GetSDF()->GetElement("visual")->GetElement("geometry")->HasElement("box")) {
+                std::vector<std::string> sizes = split(
+                        link->GetSDF()->GetElement("visual")->GetElement("geometry")->GetElement("box")->GetElement(
+                                "size")->GetValue()->GetAsString());
+                double x = std::stod(sizes[0]);
+                double y = std::stod(sizes[1]);
+                double z = std::stod(sizes[2]);
 
-            } else if (line.find("<sph") != std::string::npos) {
+                cacheLinksInfo[link->GetName()] = gazebo::math::Vector3(
+                        0.5 * kAirDensity * dragCoefficients["box"] * box_area(y, z),
+                        0.5 * kAirDensity * dragCoefficients["box"] * box_area(z, x),
+                        0.5 * kAirDensity * dragCoefficients["box"] * box_area(x, y));
 
-                std::getline(f, line);
-                double radius = parseCylinderSize(line);
+            } else if (link->GetSDF()->GetElement("visual")->GetElement("geometry")->HasElement("sphere")) {
+                double radius = std::stod(
+                        link->GetSDF()->GetElement("visual")->GetElement("geometry")->GetElement("sphere")->GetElement(
+                                "radius")->GetValue()->GetAsString());
+
                 double cacheCoeff = 0.5 * kAirDensity * dragCoefficients["sphere"] * sphere_area(radius);
                 cacheLinksInfo[link->GetName()] = gazebo::math::Vector3(cacheCoeff, cacheCoeff, cacheCoeff);
 
@@ -168,7 +131,6 @@ namespace gazebo {
                         0.5 * kAirDensity * dragCoefficients["box"] * box_area(coll_box.x, coll_box.y));
             }
 
-
         }
 
         // Pointer to the model
@@ -180,10 +142,19 @@ namespace gazebo {
     private:
         event::ConnectionPtr updateConnection;
         sdf::ElementPtr my_sdf;
+        double kAirDensity = 1.24;
 
         template<typename T>
         int sgn(T val) {
             return (T(0) < val) - (val < T(0));
+        }
+
+
+        std::vector<std::string> split(std::string const &input) {
+            std::istringstream buffer(input);
+            std::vector<std::string> ret{std::istream_iterator<std::string>(buffer),
+                                         std::istream_iterator<std::string>()};
+            return ret;
         }
 
     };

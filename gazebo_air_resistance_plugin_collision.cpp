@@ -11,7 +11,7 @@
 
 namespace gazebo {
 
-    constexpr double kAirDensity = 1.24;
+
     constexpr double kBoxDragCoefficient = 1.05;
 
     class AirResistanceBox : public ModelPlugin {
@@ -22,6 +22,10 @@ namespace gazebo {
             // Store the pointer to the model
             this->model = _parent;
             this->my_sdf = _sdf;
+
+
+            if(my_sdf->HasElement("my_air_density"))
+                kAirDensity =  std::stod( my_sdf->GetElement("my_air_density")->GetValue()->GetAsString() );
 
             // Listen to the update event. This event is broadcast every
             // simulation iteration.
@@ -61,6 +65,7 @@ namespace gazebo {
     private:
         event::ConnectionPtr updateConnection;
         sdf::ElementPtr my_sdf;
+        double kAirDensity = 1.24;
 
         template<typename T>
         int sgn(T val) {
