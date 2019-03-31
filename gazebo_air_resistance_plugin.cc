@@ -56,12 +56,11 @@ namespace gazebo {
                 auto velocity_of_link = link->GetRelativeLinearVel();
                 auto cachLink = cacheLinksInfo[link->GetName()];
 
-
-                link->AddRelativeForce(
-                        {-sgn(velocity_of_link.x) * velocity_of_link.x * velocity_of_link.x * cachLink.x,
+                gazebo::math::Vector3 drag_force(-sgn(velocity_of_link.x) * velocity_of_link.x * velocity_of_link.x * cachLink.x,
                          -sgn(velocity_of_link.y) * velocity_of_link.y * velocity_of_link.y * cachLink.y,
-                         -sgn(velocity_of_link.z) * velocity_of_link.z * velocity_of_link.z * cachLink.z
-                        });
+                         -sgn(velocity_of_link.z) * velocity_of_link.z * velocity_of_link.z * cachLink.z);
+                
+                link->AddRelativeForce(drag_force);
 
 
             }
