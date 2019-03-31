@@ -5,7 +5,7 @@
 #include <gazebo/physics/physics.hh>
 #include <gazebo/common/common.hh>
 #include <ignition/math/Vector3.hh>
-
+#include <boost/shared_ptr.hpp>
 
 #include <map>
 #include <memory>
@@ -49,7 +49,7 @@ namespace gazebo {
 
             for (auto &link : this->model->GetLinks()) {
 
-                if (cacheLinksInfo.find(link->GetName()) != cacheLinksInfo.end()) {
+                if (cacheLinksInfo.find(link->GetName()) == cacheLinksInfo.end()) {
                     newLink(link);
                 }
 
