@@ -7,6 +7,7 @@
 #include <ignition/math/Vector3.hh>
 #include <boost/shared_ptr.hpp>
 
+#include <iostream>
 #include <map>
 #include <memory>
 #include <sstream>
@@ -56,10 +57,12 @@ namespace gazebo {
                 auto velocity_of_link = link->GetRelativeLinearVel();
                 auto cachLink = cacheLinksInfo[link->GetName()];
 
-                gazebo::math::Vector3 drag_force(-sgn(velocity_of_link.x) * velocity_of_link.x * velocity_of_link.x * cachLink.x,
-                         -sgn(velocity_of_link.y) * velocity_of_link.y * velocity_of_link.y * cachLink.y,
-                         -sgn(velocity_of_link.z) * velocity_of_link.z * velocity_of_link.z * cachLink.z);
-                
+                gazebo::math::Vector3 drag_force(
+                        -sgn(velocity_of_link.x) * velocity_of_link.x * velocity_of_link.x * cachLink.x,
+                        -sgn(velocity_of_link.y) * velocity_of_link.y * velocity_of_link.y * cachLink.y,
+                        -sgn(velocity_of_link.z) * velocity_of_link.z * velocity_of_link.z * cachLink.z);
+
+
                 link->AddRelativeForce(drag_force);
 
 
@@ -87,48 +90,58 @@ namespace gazebo {
 
         void newLink(const boost::shared_ptr<gazebo::physics::Link> &link) {
 
+            auto coll_box = link->GetCollisionBoundingBox().GetSize();
 
-            if (link->GetSDF()->GetElement("visual")->GetElement("geometry")->HasElement("cylinder")) {
-                double radius = std::stod(link->GetSDF()->GetElement("visual")->GetElement("geometry")->GetElement(
-                        "cylinder")->GetElement("radius")->GetValue()->GetAsString());
-                double length = std::stod(link->GetSDF()->GetElement("visual")->GetElement("geometry")->GetElement(
-                        "cylinder")->GetElement("length")->GetValue()->GetAsString());
+            cacheLinksInfo[link->GetName()] = gazebo::math::Vector3(
+                    0.5 * kAirDensity * dragCoefficients["box"] * box_area(coll_box.y, coll_box.z),
+                    0.5 * kAirDensity * dragCoefficients["box"] * box_area(coll_box.z, coll_box.x),
+                    0.5 * kAirDensity * dragCoefficients["box"] * box_area(coll_box.x, coll_box.y));
 
-                double cyl_mantle =
-                        0.5 * kAirDensity * dragCoefficients["cylinder mantle"] * cylinder_mantle_area(length, radius);
-                double cyl_base = 0.5 * kAirDensity * dragCoefficients["cylinder base"] * cylinder_base_area(radius);
+            if (link->GetSDF()->HasElement("visual")) {
+                if (link->GetSDF()->GetElement("visual")->HasElement("geometry")) {
+                    if (link->GetSDF()->GetElement("visual")->GetElement("geometry")->HasElement("cylinder")) {
+                        double radius = std::stod(
+                                link->GetSDF()->GetElement("visual")->GetElement("geometry")->GetElement(
+                                        "cylinder")->GetElement("radius")->GetValue()->GetAsString());
+                        double length = std::stod(
+                                link->GetSDF()->GetElement("visual")->GetElement("geometry")->GetElement(
+                                        "cylinder")->GetElement("length")->GetValue()->GetAsString());
 
-                cacheLinksInfo[link->GetName()] = gazebo::math::Vector3(cyl_mantle, cyl_mantle, cyl_base);
+                        double cyl_mantle =
+                                0.5 * kAirDensity * dragCoefficients["cylinder mantle"] *
+                                cylinder_mantle_area(length, radius);
+                        double cyl_base =
+                                0.5 * kAirDensity * dragCoefficients["cylinder base"] * cylinder_base_area(radius);
 
-            } else if (link->GetSDF()->GetElement("visual")->GetElement("geometry")->HasElement("box")) {
-                std::vector<std::string> sizes = split(
-                        link->GetSDF()->GetElement("visual")->GetElement("geometry")->GetElement("box")->GetElement(
-                                "size")->GetValue()->GetAsString());
-                double x = std::stod(sizes[0]);
-                double y = std::stod(sizes[1]);
-                double z = std::stod(sizes[2]);
+                        cacheLinksInfo[link->GetName()] = gazebo::math::Vector3(cyl_mantle, cyl_mantle, cyl_base);
 
-                cacheLinksInfo[link->GetName()] = gazebo::math::Vector3(
-                        0.5 * kAirDensity * dragCoefficients["box"] * box_area(y, z),
-                        0.5 * kAirDensity * dragCoefficients["box"] * box_area(z, x),
-                        0.5 * kAirDensity * dragCoefficients["box"] * box_area(x, y));
+                    } else if (link->GetSDF()->GetElement("visual")->GetElement("geometry")->HasElement("box")) {
+                        std::vector<std::string> sizes = split(
+                                link->GetSDF()->GetElement("visual")->GetElement("geometry")->GetElement(
+                                        "box")->GetElement(
+                                        "size")->GetValue()->GetAsString());
+                        double x = std::stod(sizes[0]);
+                        double y = std::stod(sizes[1]);
+                        double z = std::stod(sizes[2]);
 
-            } else if (link->GetSDF()->GetElement("visual")->GetElement("geometry")->HasElement("sphere")) {
-                double radius = std::stod(
-                        link->GetSDF()->GetElement("visual")->GetElement("geometry")->GetElement("sphere")->GetElement(
-                                "radius")->GetValue()->GetAsString());
+                        cacheLinksInfo[link->GetName()] = gazebo::math::Vector3(
+                                0.5 * kAirDensity * dragCoefficients["box"] * box_area(y, z),
+                                0.5 * kAirDensity * dragCoefficients["box"] * box_area(z, x),
+                                0.5 * kAirDensity * dragCoefficients["box"] * box_area(x, y));
 
-                double cacheCoeff = 0.5 * kAirDensity * dragCoefficients["sphere"] * sphere_area(radius);
-                cacheLinksInfo[link->GetName()] = gazebo::math::Vector3(cacheCoeff, cacheCoeff, cacheCoeff);
+                    } else if (link->GetSDF()->GetElement("visual")->GetElement("geometry")->HasElement("sphere")) {
+                        double radius = std::stod(
+                                link->GetSDF()->GetElement("visual")->GetElement("geometry")->GetElement(
+                                        "sphere")->GetElement(
+                                        "radius")->GetValue()->GetAsString());
 
-            } else {
-                auto coll_box = link->GetCollisionBoundingBox().GetSize();
+                        double cacheCoeff = 0.5 * kAirDensity * dragCoefficients["sphere"] * sphere_area(radius);
+                        cacheLinksInfo[link->GetName()] = gazebo::math::Vector3(cacheCoeff, cacheCoeff, cacheCoeff);
 
-                cacheLinksInfo[link->GetName()] = gazebo::math::Vector3(
-                        0.5 * kAirDensity * dragCoefficients["box"] * box_area(coll_box.y, coll_box.z),
-                        0.5 * kAirDensity * dragCoefficients["box"] * box_area(coll_box.z, coll_box.x),
-                        0.5 * kAirDensity * dragCoefficients["box"] * box_area(coll_box.x, coll_box.y));
+                    }
+                }
             }
+
 
         }
 
