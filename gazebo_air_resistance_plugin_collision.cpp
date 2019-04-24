@@ -31,6 +31,8 @@ namespace gazebo {
             // simulation iteration.
             this->updateConnection = event::Events::ConnectWorldUpdateBegin(
                     std::bind(&AirResistanceBox::OnUpdate, this));
+
+            m_angular_drag_coeff = 5.0;
         }
 
         // Called by the world update start event
@@ -42,7 +44,7 @@ namespace gazebo {
 
                 auto velocity_of_link = link->GetRelativeLinearVel();
 
-                gazebo::math::Vector3 drag_force(
+                ignition::math::Vector3d drag_force(
                         0.5 * kAirDensity * -sgn(velocity_of_link.x) * velocity_of_link.x * velocity_of_link.x *
                         kBoxDragCoefficient * size_box.y * size_box.z,
                         0.5 * kAirDensity * -sgn(velocity_of_link.y) * velocity_of_link.y * velocity_of_link.y *
@@ -52,6 +54,26 @@ namespace gazebo {
 
 
                 link->AddRelativeForce(drag_force);
+
+
+                auto angular_vel = link->GetRelativeAngularVel();
+                auto link_collision_box = link->GetCollisionBoundingBox().GetSize();
+
+
+                ignition::math::Vector3d drag_torque(
+                        ( pow(angular_vel.x, 2.0) * kAirDensity * kBoxDragCoefficient
+                          *link_collision_box.x * (sgn(drag_force.Y())*pow(link_collision_box.y,4.0)  - sgn(drag_force.Z())* pow(link_collision_box.z,4.0)) ) /128.0 ,
+
+                        (pow(angular_vel.y, 2.0) * kAirDensity * kBoxDragCoefficient
+                         *link_collision_box.y * (sgn(drag_force.Z())*pow(link_collision_box.z,4.0)  - sgn(drag_force.X())*pow(link_collision_box.x,4.0)) ) /128.0 ,
+
+                        (pow(angular_vel.z, 2.0) * kAirDensity * kBoxDragCoefficient
+                         *link_collision_box.z * (sgn(drag_force.X())*pow(link_collision_box.x,4.0)  - sgn(drag_force.Y())*pow(link_collision_box.y,4.0)) ) /128.0 );
+
+
+                link->AddRelativeTorque(drag_torque);
+
+
             }
 
         }
@@ -63,6 +85,7 @@ namespace gazebo {
 
         // Pointer to the update event connection
     private:
+        double m_angular_drag_coeff;
         event::ConnectionPtr updateConnection;
         sdf::ElementPtr my_sdf;
         double kAirDensity = 1.24;

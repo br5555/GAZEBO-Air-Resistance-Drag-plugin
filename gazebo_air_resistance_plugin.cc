@@ -27,6 +27,7 @@ namespace gazebo {
 
     class AirResistance : public ModelPlugin {
     public:
+
         void Load(physics::ModelPtr _parent, sdf::ElementPtr _sdf) {
 
 
@@ -42,6 +43,8 @@ namespace gazebo {
             // simulation iteration.
             this->updateConnection = event::Events::ConnectWorldUpdateBegin(
                     std::bind(&AirResistance::OnUpdate, this));
+            m_angular_drag_coeff = 5.0;
+
         }
 
         // Called by the world update start event
@@ -54,16 +57,34 @@ namespace gazebo {
                     newLink(link);
                 }
 
+
                 auto velocity_of_link = link->GetRelativeLinearVel();
                 auto cachLink = cacheLinksInfo[link->GetName()];
 
-                gazebo::math::Vector3 drag_force(
+                ignition::math::Vector3d drag_force(
                         -sgn(velocity_of_link.x) * velocity_of_link.x * velocity_of_link.x * cachLink.x,
                         -sgn(velocity_of_link.y) * velocity_of_link.y * velocity_of_link.y * cachLink.y,
                         -sgn(velocity_of_link.z) * velocity_of_link.z * velocity_of_link.z * cachLink.z);
 
 
                 link->AddRelativeForce(drag_force);
+
+
+
+               auto angular_vel = link->GetRelativeAngularVel();
+                auto link_collision_box = link->GetCollisionBoundingBox().GetSize();
+
+
+                ignition::math::Vector3d drag_torque(
+                        ( pow(angular_vel.x, 2.0) * kAirDensity * dragCoefficients["box"]
+                          *link_collision_box.x * (sgn(drag_force.Y())*pow(link_collision_box.y,4.0)  - sgn(drag_force.Z())* pow(link_collision_box.z,4.0)) ) /128.0 ,
+
+                        (pow(angular_vel.y, 2.0) * kAirDensity * dragCoefficients["box"]
+                         *link_collision_box.y * (sgn(drag_force.Z())*pow(link_collision_box.z,4.0)  - sgn(drag_force.X())*pow(link_collision_box.x,4.0)) ) /128.0 ,
+
+                        (pow(angular_vel.z, 2.0) * kAirDensity * dragCoefficients["box"]
+                         *link_collision_box.z * (sgn(drag_force.X())*pow(link_collision_box.x,4.0)  - sgn(drag_force.Y())*pow(link_collision_box.y,4.0)) ) /128.0 );
+                link->AddRelativeTorque(drag_torque);
 
 
             }
@@ -152,6 +173,7 @@ namespace gazebo {
 
         // Pointer to the update event connection
     private:
+        double m_angular_drag_coeff;
         event::ConnectionPtr updateConnection;
         sdf::ElementPtr my_sdf;
         double kAirDensity = 1.24;
@@ -160,7 +182,6 @@ namespace gazebo {
         int sgn(T val) {
             return (T(0) < val) - (val < T(0));
         }
-
 
         std::vector<std::string> split(std::string const &input) {
             std::istringstream buffer(input);
