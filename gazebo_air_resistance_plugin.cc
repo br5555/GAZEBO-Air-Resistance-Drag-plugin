@@ -59,12 +59,12 @@ namespace gazebo {
 
 
                 auto velocity_of_link = link->GetRelativeLinearVel();
-                auto cachLink = cacheLinksInfo[link->GetName()];
+                auto cacheLink = cacheLinksInfo[link->GetName()];
 
                 ignition::math::Vector3d drag_force(
-                        -sgn(velocity_of_link.x) * velocity_of_link.x * velocity_of_link.x * cachLink.x,
-                        -sgn(velocity_of_link.y) * velocity_of_link.y * velocity_of_link.y * cachLink.y,
-                        -sgn(velocity_of_link.z) * velocity_of_link.z * velocity_of_link.z * cachLink.z);
+                        -sgn(velocity_of_link.x) * velocity_of_link.x * velocity_of_link.x * cacheLink.X(),
+                        -sgn(velocity_of_link.y) * velocity_of_link.y * velocity_of_link.y * cacheLink.Y(),
+                        -sgn(velocity_of_link.z) * velocity_of_link.z * velocity_of_link.z * cacheLink.Z());
 
 
                 link->AddRelativeForce(drag_force);
@@ -72,18 +72,17 @@ namespace gazebo {
 
 
                auto angular_vel = link->GetRelativeAngularVel();
-                auto link_collision_box = link->GetCollisionBoundingBox().GetSize();
+                auto cacheLinkAng = cacheLinksInfoAngular[link->GetName()];
 
 
                 ignition::math::Vector3d drag_torque(
-                        ( pow(angular_vel.x, 2.0) * kAirDensity * dragCoefficients["box"]
-                          *link_collision_box.x * (sgn(drag_force.Y())*pow(link_collision_box.y,4.0)  - sgn(drag_force.Z())* pow(link_collision_box.z,4.0)) ) /128.0 ,
+                         -sgn(angular_vel.x) * pow(angular_vel.x, 2.0) *  cacheLinkAng.X(),
 
-                        (pow(angular_vel.y, 2.0) * kAirDensity * dragCoefficients["box"]
-                         *link_collision_box.y * (sgn(drag_force.Z())*pow(link_collision_box.z,4.0)  - sgn(drag_force.X())*pow(link_collision_box.x,4.0)) ) /128.0 ,
+                         -sgn(angular_vel.y) * pow(angular_vel.y, 2.0) *  cacheLinkAng.Y(),
 
-                        (pow(angular_vel.z, 2.0) * kAirDensity * dragCoefficients["box"]
-                         *link_collision_box.z * (sgn(drag_force.X())*pow(link_collision_box.x,4.0)  - sgn(drag_force.Y())*pow(link_collision_box.y,4.0)) ) /128.0 );
+                         -sgn(angular_vel.z) * pow(angular_vel.z, 2.0) *  cacheLinkAng.Z() ) ;
+
+
                 link->AddRelativeTorque(drag_torque);
 
 
@@ -113,10 +112,19 @@ namespace gazebo {
 
             auto coll_box = link->GetCollisionBoundingBox().GetSize();
 
-            cacheLinksInfo[link->GetName()] = gazebo::math::Vector3(
+            cacheLinksInfo[link->GetName()] = ignition::math::Vector3d(
                     0.5 * kAirDensity * dragCoefficients["box"] * box_area(coll_box.y, coll_box.z),
                     0.5 * kAirDensity * dragCoefficients["box"] * box_area(coll_box.z, coll_box.x),
                     0.5 * kAirDensity * dragCoefficients["box"] * box_area(coll_box.x, coll_box.y));
+
+
+            cacheLinksInfoAngular[link->GetName()] = ignition::math::Vector3d(
+                     kAirDensity * dragCoefficients["box"]  *  (1/8.0) * coll_box.x *  (pow(coll_box.z,3.0) +  pow(coll_box.y,3.0) ),
+
+                     kAirDensity * dragCoefficients["box"]  *   (1/8.0) * coll_box.y *  (pow(coll_box.x,3.0) +  pow(coll_box.z,3.0) ) ,
+
+                     kAirDensity * dragCoefficients["box"]  *  (1/8.0) * coll_box.z *  (pow(coll_box.y,3.0) +  pow(coll_box.x,3.0) ) ) ;
+
 
             if (link->GetSDF()->HasElement("visual")) {
                 if (link->GetSDF()->GetElement("visual")->HasElement("geometry")) {
@@ -134,7 +142,20 @@ namespace gazebo {
                         double cyl_base =
                                 0.5 * kAirDensity * dragCoefficients["cylinder base"] * cylinder_base_area(radius);
 
-                        cacheLinksInfo[link->GetName()] = gazebo::math::Vector3(cyl_mantle, cyl_mantle, cyl_base);
+                        cacheLinksInfo[link->GetName()] = ignition::math::Vector3d(cyl_mantle, cyl_mantle, cyl_base);
+
+                        double cyl_mantle_ang_z = M_PI * dragCoefficients["cylinder mantle"] * kAirDensity * pow(radius ,4.0) * length;
+
+                        double cyl_base_ang_z = M_PI *  kAirDensity * dragCoefficients["cylinder base"] * (1.0/5.0) * pow(radius ,5.0);
+
+
+                        double cyl_mantle_ang_xy = M_PI * dragCoefficients["cylinder mantle"] * kAirDensity * radius  * pow(length, 3.0) *(1.0/24.0);
+
+                        double cyl_base_ang_xy = M_PI *  kAirDensity * dragCoefficients["cylinder base"] * (1.0/8.0) * pow(radius ,2.0) * pow(length ,2.0);
+
+                        cacheLinksInfoAngular[link->GetName()] = ignition::math::Vector3d(cyl_mantle_ang_xy + 2.0*cyl_base_ang_xy, cyl_mantle_ang_xy + 2.0*cyl_base_ang_xy, cyl_mantle_ang_z + 2.0*cyl_base_ang_z);
+
+
 
                     } else if (link->GetSDF()->GetElement("visual")->GetElement("geometry")->HasElement("box")) {
                         std::vector<std::string> sizes = split(
@@ -145,10 +166,18 @@ namespace gazebo {
                         double y = std::stod(sizes[1]);
                         double z = std::stod(sizes[2]);
 
-                        cacheLinksInfo[link->GetName()] = gazebo::math::Vector3(
+                        cacheLinksInfo[link->GetName()] = ignition::math::Vector3d(
                                 0.5 * kAirDensity * dragCoefficients["box"] * box_area(y, z),
                                 0.5 * kAirDensity * dragCoefficients["box"] * box_area(z, x),
                                 0.5 * kAirDensity * dragCoefficients["box"] * box_area(x, y));
+
+
+                        cacheLinksInfoAngular[link->GetName()] = ignition::math::Vector3d(
+                                kAirDensity * dragCoefficients["box"]  *  (1/8.0) * x *  (pow(z,3.0) +  pow(y,3.0) ),
+
+                                kAirDensity * dragCoefficients["box"]  *   (1/8.0) * y *  (pow(x,3.0) +  pow(z,3.0) ) ,
+
+                                kAirDensity * dragCoefficients["box"]  *  (1/8.0) * z *  (pow(y,3.0) +  pow(x,3.0) ) ) ;
 
                     } else if (link->GetSDF()->GetElement("visual")->GetElement("geometry")->HasElement("sphere")) {
                         double radius = std::stod(
@@ -157,7 +186,12 @@ namespace gazebo {
                                         "radius")->GetValue()->GetAsString());
 
                         double cacheCoeff = 0.5 * kAirDensity * dragCoefficients["sphere"] * sphere_area(radius);
-                        cacheLinksInfo[link->GetName()] = gazebo::math::Vector3(cacheCoeff, cacheCoeff, cacheCoeff);
+                        cacheLinksInfo[link->GetName()] = ignition::math::Vector3d(cacheCoeff, cacheCoeff, cacheCoeff);
+
+                        double cacheCoeffAng =  0.5 * kAirDensity * dragCoefficients["sphere"] *(8.0/3.0) * M_PI * pow(radius,4)  ;
+
+                        cacheLinksInfoAngular[link->GetName()] = ignition::math::Vector3d(cacheCoeffAng, cacheCoeffAng, cacheCoeffAng);
+
 
                     }
                 }
@@ -169,7 +203,8 @@ namespace gazebo {
         // Pointer to the model
     private:
         physics::ModelPtr model;
-        std::map<std::string, gazebo::math::Vector3> cacheLinksInfo;
+        std::map<std::string, ignition::math::Vector3d> cacheLinksInfo;
+        std::map<std::string, ignition::math::Vector3d> cacheLinksInfoAngular;
 
         // Pointer to the update event connection
     private:

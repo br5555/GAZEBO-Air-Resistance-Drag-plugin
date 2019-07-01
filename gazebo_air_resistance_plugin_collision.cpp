@@ -61,18 +61,14 @@ namespace gazebo {
 
 
                 ignition::math::Vector3d drag_torque(
-                        ( pow(angular_vel.x, 2.0) * kAirDensity * kBoxDragCoefficient
-                          *link_collision_box.x * (sgn(drag_force.Y())*pow(link_collision_box.y,4.0)  - sgn(drag_force.Z())* pow(link_collision_box.z,4.0)) ) /128.0 ,
+                        ( -sgn(angular_vel.x) * kAirDensity * kBoxDragCoefficient  * pow(angular_vel.x, 2.0) *  (1/8.0) * link_collision_box.x *  (pow(link_collision_box.z,3.0) +  pow(link_collision_box.y,3.0) ),
 
-                        (pow(angular_vel.y, 2.0) * kAirDensity * kBoxDragCoefficient
-                         *link_collision_box.y * (sgn(drag_force.Z())*pow(link_collision_box.z,4.0)  - sgn(drag_force.X())*pow(link_collision_box.x,4.0)) ) /128.0 ,
+                        -sgn(angular_vel.y) * kAirDensity * kBoxDragCoefficient  * pow(angular_vel.y, 2.0) *  (1/8.0) * link_collision_box.y *  (pow(link_collision_box.x,3.0) +  pow(link_collision_box.z,3.0) ) ,
 
-                        (pow(angular_vel.z, 2.0) * kAirDensity * kBoxDragCoefficient
-                         *link_collision_box.z * (sgn(drag_force.X())*pow(link_collision_box.x,4.0)  - sgn(drag_force.Y())*pow(link_collision_box.y,4.0)) ) /128.0 );
+                        -sgn(angular_vel.z) * kAirDensity * kBoxDragCoefficient * pow(angular_vel.z, 2.0) *  (1/8.0) * link_collision_box.z *  (pow(link_collision_box.y,3.0) +  pow(link_collision_box.x,3.0) ) );
 
 
                 link->AddRelativeTorque(drag_torque);
-
 
             }
 
