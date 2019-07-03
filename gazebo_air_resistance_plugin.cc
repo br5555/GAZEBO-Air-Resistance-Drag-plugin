@@ -52,7 +52,7 @@ namespace gazebo {
         void OnUpdate() {
 
             for (auto &link : this->model->GetLinks()) {
-
+                //std::cout << "Doso sam ti " << std::endl;
                 if (cacheLinksInfo.find(link->GetName()) == cacheLinksInfo.end()) {
                     newLink(link);
                 }
@@ -84,7 +84,7 @@ namespace gazebo {
 
 
                 link->AddRelativeTorque(drag_torque);
-
+                checkChildrenLinks(link);
 
             }
 
@@ -202,6 +202,48 @@ namespace gazebo {
 
         // Pointer to the model
     private:
+
+        void checkChildrenLinks(const boost::shared_ptr<gazebo::physics::Link>& mylink)
+        {
+            for (auto &link : mylink->GetChildJointsLinks()) {
+
+
+                    if (cacheLinksInfo.find(link->GetName()) == cacheLinksInfo.end()) {
+                        newLink(link);
+                    }
+
+
+                    auto velocity_of_link = link->GetRelativeLinearVel();
+                    auto cacheLink = cacheLinksInfo[link->GetName()];
+
+                    ignition::math::Vector3d drag_force(
+                            -sgn(velocity_of_link.x) * velocity_of_link.x * velocity_of_link.x * cacheLink.X(),
+                            -sgn(velocity_of_link.y) * velocity_of_link.y * velocity_of_link.y * cacheLink.Y(),
+                            -sgn(velocity_of_link.z) * velocity_of_link.z * velocity_of_link.z * cacheLink.Z());
+
+
+                    link->AddRelativeForce(drag_force);
+
+
+
+                    auto angular_vel = link->GetRelativeAngularVel();
+                    auto cacheLinkAng = cacheLinksInfoAngular[link->GetName()];
+
+
+                    ignition::math::Vector3d drag_torque(
+                            -sgn(angular_vel.x) * pow(angular_vel.x, 2.0) *  cacheLinkAng.X(),
+
+                            -sgn(angular_vel.y) * pow(angular_vel.y, 2.0) *  cacheLinkAng.Y(),
+
+                            -sgn(angular_vel.z) * pow(angular_vel.z, 2.0) *  cacheLinkAng.Z() ) ;
+
+
+                    link->AddRelativeTorque(drag_torque);
+                    checkChildrenLinks(link);
+
+                }
+        }
+
         physics::ModelPtr model;
         std::map<std::string, ignition::math::Vector3d> cacheLinksInfo;
         std::map<std::string, ignition::math::Vector3d> cacheLinksInfoAngular;
